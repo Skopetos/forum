@@ -51,6 +51,5 @@ func main() {
 	if err != nil {
 		fmt.Println("Server error:", err)
 	}
+	os.Exit(1)
 }
-
-//os.Exit(1)

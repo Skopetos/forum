@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"forum-app/app"
 	"forum-app/database"
 	"forum-app/routes"
@@ -15,7 +16,7 @@ import (
 
 func main() {
 
-	addr := flag.String("addr", ":8080", "HTTP network address")
+	addr := flag.String("addr", ":443", "prosdontfake.gr")
 	dbName := flag.String("db", "app.db", "Database file name sqlite3")
 
 	flag.Parse()
@@ -45,7 +46,11 @@ func main() {
 
 	logger.Info("starting server", "addr", *addr)
 
-	server.ListenAndServe()
-
-	os.Exit(1)
+	fmt.Println("Server running on https://prosdontfake.gr")
+	err = server.ListenAndServeTLS("/etc/letsencrypt/live/prosdontfake.gr/fullchain.pem", "/etc/letsencrypt/live/prosdontfake.gr/privkey.pem")
+	if err != nil {
+		fmt.Println("Server error:", err)
+	}
 }
+
+//os.Exit(1)

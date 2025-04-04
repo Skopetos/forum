@@ -19,5 +19,9 @@ module.exports = {
       'py-1',
       'text-xl',
       'text-2xl',
+      'pt-[6rem]',
+      'pr-2',
+      'gap-x-2',
+      'gap-x-1',
     ],
   };

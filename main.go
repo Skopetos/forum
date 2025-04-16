@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"forum-app/app"
 	"forum-app/database"
+	"forum-app/ratelimiter"
 	"forum-app/routes"
 	"forum-app/session"
 	"log"
@@ -32,11 +33,13 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	session := session.NewSessionStore(1*time.Minute, 1*time.Minute)
+	rl := ratelimiter.NewRateLimiter(100, 1*time.Minute)
 
 	app := &app.Application{
-		DB:      db,
-		Logger:  logger,
-		Session: session,
+		DB:          db,
+		Logger:      logger,
+		Session:     session,
+		RateLimiter: rl,
 	}
 
 	server := http.Server{

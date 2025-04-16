@@ -2,12 +2,13 @@ package render
 
 import (
 	"fmt"
+	"forum-app/app"
 	"forum-app/middleware"
 	"forum-app/models"
 	"forum-app/session"
 	"html/template"
 	"net/http"
-	"strings"
+	"strconv"
 )
 
 var files = []string{
@@ -18,7 +19,6 @@ var files = []string{
 	"./assets/partials/posts.html",
 	"./assets/partials/view.html",
 	"./assets/partials/wip.html",
-	"./assets/partials/error.html",
 	"./assets/partials/login.html",
 	"./assets/partials/register.html"}
 
@@ -43,7 +43,7 @@ func (view *View) Render(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func PrepareView(source string, r *http.Request) (View, error) {
+func PrepareView(source string, r *http.Request, app *app.Application) (View, error) {
 	user, ok := r.Context().Value(middleware.UserKey).(*models.Users)
 	session := r.Context().Value("user_session").(*session.Session)
 	redirect := r.URL.Query().Get("redirect")
@@ -55,38 +55,41 @@ func PrepareView(source string, r *http.Request) (View, error) {
 		data = models.PageData{User: nil, Session: session}
 	}
 
-	if strings.HasPrefix(source, "error:") {
-		fmt.Println("Error page requested:", source)
-		data.Data = make(map[string]interface{})
-		if source == "error:404" {
-			data.Data["message"] = "Page Not Found"
-		}
-		if source == "error:500" {
-			data.Data["message"] = "Internal Server Error"
-		}
-		if source == "error:403" {
-			data.Data["message"] = "Forbidden"
-		}
-		view := View{
-			Name: source[:6],
-			Data: &data,
-		}
-		data.Source = "error"
-		view.Path = files
-		return view, nil
-	}
-
-	posts, err := models.GetData(source, r)
-	if err != nil {
-		return View{}, err
-	}
-
 	data.Data = make(map[string]interface{})
-	if source == "home" {
-		data.Data["posts"] = posts
-	} else if source == "view" {
-		data.Data["post"] = posts
+
+	if session.Data == nil {
+		session.Data = make(map[string]interface{})
 	}
+
+	// Retrieve flash messages
+	if flash, exists := session.GetFlash("error"); exists {
+		data.Data["error"] = flash
+	}
+
+	if source == "home" {
+		posts, err := app.DB.GetPostsForHome(1, r.URL.Query().Get("category"), user)
+		if err != nil {
+			return View{}, err
+		}
+		data.Data["posts"] = posts
+	}
+
+	if source == "view" {
+		postID := r.URL.Query().Get("id")
+		id, err := strconv.Atoi(postID)
+		if err != nil {
+			return View{}, fmt.Errorf("invalid post ID: %v", err)
+		}
+		if postID == "" {
+			return View{}, fmt.Errorf("post ID is required")
+		}
+		post, err := app.DB.GetPostByID(id)
+		if err != nil {
+			return View{}, err
+		}
+		data.Data["post"] = post
+	}
+
 	data.Source = source
 
 	if source == "create" || source == "home" {

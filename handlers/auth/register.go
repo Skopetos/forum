@@ -4,25 +4,26 @@ import (
 	"fmt"
 	"forum-app/app"
 	"forum-app/helpers"
-	"forum-app/helpers/flash"
 	"forum-app/helpers/validator"
 	"forum-app/render"
 	"net/http"
 )
 
-func GetRegister(w http.ResponseWriter, r *http.Request) {
-	view, err := render.PrepareView("register", r)
-	if err != nil {
-		fmt.Println(err)
-		http.Error(w, "Something went wrong", http.StatusInternalServerError)
-		return
-	}
+func GetRegister(app *app.Application) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		view, err := render.PrepareView("register", r, app)
+		if err != nil {
+			fmt.Println(err)
+			http.Error(w, "Something went wrong", http.StatusInternalServerError)
+			return
+		}
 
-	err = view.Render(w, r)
-	if err != nil {
-		fmt.Println(err)
-		http.Error(w, "Something went wrong", http.StatusInternalServerError)
-		return
+		err = view.Render(w, r)
+		if err != nil {
+			fmt.Println(err)
+			http.Error(w, "Something went wrong", http.StatusInternalServerError)
+			return
+		}
 	}
 }
 func StoreRegister(app *app.Application) http.HandlerFunc {
@@ -43,7 +44,14 @@ func StoreRegister(app *app.Application) http.HandlerFunc {
 		valid, errors := validator.ValidateRequest(r, inputs)
 
 		if !valid {
-			flash.HandleMessages(w, r, errors, r.Header.Get("Referer"), "error")
+			cookie, err := r.Cookie("session")
+			if err != nil {
+				http.Error(w, "Session cookie not found", http.StatusUnauthorized)
+				return
+			}
+			session, _ := app.Session.GetSession(cookie.Value)
+			session.SetFlash("error", errors)
+			http.Redirect(w, r, "/register", http.StatusFound)
 			return
 		}
 

@@ -8,11 +8,11 @@
   <link href="/assets/output.css" rel="stylesheet">
 </head>
 {{if and (ne .Source "login") (ne .Source "register")}}
-<body>
+<body class="h-full">
     {{template "nav" .}}
   {{end}}
   {{if eq .Source "home"}}
-    {{template "main" .}}
+    {{template "home" .}}
   {{end}}
   {{if eq .Source "create"}}
     {{template "create" .}}

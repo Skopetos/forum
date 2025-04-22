@@ -1,36 +1,13 @@
 package render
 
 import (
-	"fmt"
 	"forum-app/app"
-	"forum-app/middleware"
-	"forum-app/models"
-	"forum-app/session"
+	"forum-app/helpers"
 	"html/template"
 	"net/http"
-	"strconv"
 )
 
-var files = []string{
-	"./assets/base.html",
-	"./assets/partials/nav.html",
-	"./assets/partials/create.html",
-	"./assets/partials/home.html",
-	"./assets/partials/posts.html",
-	"./assets/partials/view.html",
-	"./assets/partials/wip.html",
-	"./assets/partials/login.html",
-	"./assets/partials/register.html"}
-
-var categories = []string{
-	"General",
-	"Technology",
-	"Entertainment",
-	"Sports",
-	"News",
-	"Anouncements",
-	"Other"}
-
+// Render renders the view using the provided HTTP response writer and request.
 func (view *View) Render(w http.ResponseWriter, r *http.Request) error {
 	tmpl, err := template.ParseFiles(view.Path...)
 	if err != nil {
@@ -43,64 +20,51 @@ func (view *View) Render(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// RenderError renders an error page with the provided error message.
+func RenderError(w http.ResponseWriter, r *http.Request, err error) {
+	tmpl, parseErr := template.ParseFiles("./assets/error.html")
+	if parseErr != nil {
+		http.Error(w, "Something went wrong", http.StatusInternalServerError)
+		return
+	}
+	data := helpers.Beautify(err)
+	execErr := tmpl.Execute(w, data)
+	if execErr != nil {
+		http.Error(w, "Something went wrong", http.StatusInternalServerError)
+		return
+	}
+}
+
+// PrepareView prepares the view data and structure based on the source and request.
 func PrepareView(source string, r *http.Request, app *app.Application) (View, error) {
-	user, ok := r.Context().Value(middleware.UserKey).(*models.Users)
-	session := r.Context().Value("user_session").(*session.Session)
-	redirect := r.URL.Query().Get("redirect")
+	user, session := getUserAndSession(r)
+	data := initializePageData(user, session)
 
-	data := models.PageData{}
-	if ok && user != nil {
-		data = models.PageData{User: user, Session: session}
-	} else {
-		data = models.PageData{User: nil, Session: session}
-	}
+	handleFlashMessages(session, &data)
 
-	data.Data = make(map[string]interface{})
-
-	if session.Data == nil {
-		session.Data = make(map[string]interface{})
-	}
-
-	// Retrieve flash messages
-	if flash, exists := session.GetFlash("error"); exists {
-		data.Data["error"] = flash
-	}
-
-	if source == "home" {
-		posts, err := app.DB.GetPostsForHome(1, r.URL.Query().Get("category"), user)
-		if err != nil {
+	switch source {
+	case "home":
+		if err := handleHomePage(r, app, user, &data); err != nil {
 			return View{}, err
 		}
-		data.Data["posts"] = posts
-	}
-
-	if source == "view" {
-		postID := r.URL.Query().Get("id")
-		id, err := strconv.Atoi(postID)
-		if err != nil {
-			return View{}, fmt.Errorf("invalid post ID: %v", err)
-		}
-		if postID == "" {
-			return View{}, fmt.Errorf("post ID is required")
-		}
-		post, err := app.DB.GetPostByID(id)
-		if err != nil {
+	case "view":
+		if err := handleViewPage(r, app, &data); err != nil {
 			return View{}, err
 		}
-		data.Data["post"] = post
+	}
+
+	if source == "create" || source == "home" {
+		setCategories(&data)
 	}
 
 	data.Source = source
-
-	if source == "create" || source == "home" {
-		data.Data["categories"] = categories
-	}
 
 	view := View{
 		Name: source,
 		Data: &data,
 	}
 
+	redirect := r.URL.Query().Get("redirect")
 	if redirect != "" {
 		data.Redirect = redirect
 	}

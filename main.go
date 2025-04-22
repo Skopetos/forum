@@ -1,8 +1,8 @@
 package main
 
 import (
+	"context"
 	"flag"
-	"fmt"
 	"forum-app/app"
 	"forum-app/database"
 	"forum-app/ratelimiter"
@@ -12,6 +12,8 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
@@ -22,15 +24,17 @@ func main() {
 
 	flag.Parse()
 
-	db, err := database.NewConnection(*dbName)
+	// Initialize logger
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
+	db, err := initDatabase(*dbName, logger)
 
 	if err != nil {
 		log.Fatalf("Database initialization error: %v", err)
+		os.Exit(1)
 	}
 
 	defer db.DB.Close()
-
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	session := session.NewSessionStore(1*time.Minute, 1*time.Minute)
 	rl := ratelimiter.NewRateLimiter(100, 1*time.Minute)
@@ -47,12 +51,44 @@ func main() {
 		Handler: routes.Web(app),
 	}
 
-	logger.Info("starting server", "addr", *addr)
+	go func() {
+		logger.Info("starting server", "addr", *addr)
+		if err := server.ListenAndServeTLS(
+			"/etc/letsencrypt/live/prosdontfake.gr/fullchain.pem",
+			"/etc/letsencrypt/live/prosdontfake.gr/privkey.pem",
+		); err != nil && err != http.ErrServerClosed {
+			logger.Error("HTTPS server error", "error", err)
+			os.Exit(1)
+		}
+	}()
 
-	fmt.Println("Server running on https://prosdontfake.gr")
-	err = server.ListenAndServeTLS("/etc/letsencrypt/live/prosdontfake.gr/fullchain.pem", "/etc/letsencrypt/live/prosdontfake.gr/privkey.pem")
+	waitForShutdown(&server, logger)
+
+}
+func initDatabase(dbName string, logger *slog.Logger) (*database.Connection, error) {
+	db, err := database.NewConnection(dbName)
 	if err != nil {
-		fmt.Println("Server error:", err)
+		return nil, err
 	}
-	os.Exit(1)
+	logger.Info("Database connected", "dbName", dbName)
+	return db, nil
+}
+
+func waitForShutdown(server *http.Server, logger *slog.Logger) {
+	// Listen for termination signals
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+	<-stop
+	logger.Info("shutting down server")
+
+	// Gracefully shut down the server
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(ctx); err != nil {
+		logger.Error("Server shutdown error", "error", err)
+	} else {
+		logger.Info("Server stopped gracefully")
+	}
 }

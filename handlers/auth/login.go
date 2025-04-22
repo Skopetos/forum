@@ -10,12 +10,12 @@ import (
 	"net/http"
 )
 
+// GetLogin returns an HTTP handler function for rendering the login page.
 func GetLogin(app *app.Application) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		view, err := render.PrepareView("login", r, app)
 		if err != nil {
-			fmt.Println(err)
-			http.Error(w, "Something went wrong", http.StatusInternalServerError)
+			render.RenderError(w, r, err)
 			return
 		}
 
@@ -28,25 +28,26 @@ func GetLogin(app *app.Application) http.HandlerFunc {
 	}
 }
 
+// PostLogin handles user login by validating credentials and creating a session.
 func PostLogin(app *app.Application) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		err := r.ParseForm()
 		if err != nil {
-			http.Error(w, "Failed to parse form: "+err.Error(), http.StatusBadRequest)
+			render.RenderError(w, r, err)
 			return
 		}
 
 		inputs := map[string][]interface{}{
 			"email":    {"required", "string", "email"},
-			"password": {"required", "string"},
+			"password": {"required", "string", "login_attempt"},
 		}
 
-		valid, errors := validator.ValidateRequest(r, inputs)
+		valid, errors := validator.ValidateRequest(r, inputs, app)
 
 		if !valid {
 			cookie, err := r.Cookie("session")
 			if err != nil {
-				http.Error(w, "Session cookie not found", http.StatusUnauthorized)
+				render.RenderError(w, r, err)
 				return
 			}
 			session, _ := app.Session.GetSession(cookie.Value)
@@ -56,15 +57,8 @@ func PostLogin(app *app.Application) http.HandlerFunc {
 		}
 
 		user, err := app.DB.GetUserByEmail(r.FormValue("email"))
-		if err != nil || helpers.CompareHashAndPassword(user.Password, r.FormValue("password")) != nil {
-			cookie, err := r.Cookie("session")
-			if err != nil {
-				http.Error(w, "Session cookie not found", http.StatusUnauthorized)
-				return
-			}
-			session, _ := app.Session.GetSession(cookie.Value)
-			session.SetFlash("error", "Invalid email or password.")
-			http.Redirect(w, r, "/login", http.StatusFound)
+		if err != nil {
+			render.RenderError(w, r, err)
 			return
 		}
 

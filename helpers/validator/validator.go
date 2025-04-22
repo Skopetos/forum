@@ -2,63 +2,21 @@ package validator
 
 import (
 	"errors"
+	"forum-app/app"
+	"forum-app/helpers"
 	"net/http"
-	"net/mail"
-	"strconv"
 	"strings"
 )
 
-
-type Validator struct{}
-
-
-func NewValidator() *Validator {
-	return &Validator{}
+type Validator struct {
+	app *app.Application
 }
 
-
-func (v *Validator) ValidateString(value interface{}, key string) error {
-	_, ok := value.(string)
-	if !ok {
-		return errors.New(key + " value is not a valid string")
-	}
-	return nil
+func NewValidator(app *app.Application) *Validator {
+	return &Validator{app: app}
 }
 
-
-func (v *Validator) ValidateInt(value interface{}, key string) error {
-	switch v := value.(type) {
-	case int, int8, int16, int32, int64:
-		return nil
-	case string:
-		if _, err := strconv.Atoi(v); err == nil {
-			return nil
-		}
-	}
-	return errors.New(key + " value is not a valid integer")
-}
-
-
-func (v *Validator) ValidateEmail(value interface{}) error {
-	str, ok := value.(string)
-	if !ok {
-		return errors.New("value is not a string")
-	}
-	_, err := mail.ParseAddress(str)
-	if err != nil {
-		return errors.New("invalid email format")
-	}
-	return nil
-}
-
-func (v *Validator) Required(value interface{}, key string) error {
-	if value == "" {
-		return errors.New(key + " is required")
-	}
-	return nil
-}
-
-
+// ValidateInput validates a value against a set of rules and updates the hold map.
 func (v *Validator) ValidateInput(value interface{}, rules []interface{}, key string, hold map[string]interface{}) error {
 	for _, rule := range rules {
 		switch rule := rule.(type) {
@@ -80,10 +38,34 @@ func (v *Validator) ValidateInput(value interface{}, rules []interface{}, key st
 				if err := v.Required(value, key); err != nil {
 					return err
 				}
+			case rule == "sometimes":
+				// Skip validation if the field is not present
+				if value == "" {
+					return nil
+				}
 			case strings.HasPrefix(rule, "same:"):
 				otherkey := strings.TrimPrefix(rule, "same:")
 				if value != hold[otherkey] {
 					return errors.New(key + " must match " + otherkey)
+				}
+			case strings.HasPrefix(rule, "exists:"):
+				// Parse the table and column from the rule
+				parts := strings.Split(strings.TrimPrefix(rule, "exists:"), ",")
+				if len(parts) != 2 {
+					return errors.New("invalid exists rule format, expected 'exists:table,column'")
+				}
+				table, column := parts[0], parts[1]
+				if err := v.Exists(value, table, column); err != nil {
+					return err
+				}
+			case rule == "login_attempt":
+				email, emailExists := hold["email"].(string)
+				password, passwordExists := hold["password"].(string)
+				if !emailExists || !passwordExists {
+					return errors.New("email and password are required for login attempt validation")
+				}
+				if err := v.ValidateLoginAttempt(email, password); err != nil {
+					return err
 				}
 			default:
 				return errors.New("unknown validation rule: " + rule)
@@ -99,11 +81,11 @@ func (v *Validator) ValidateInput(value interface{}, rules []interface{}, key st
 	return nil
 }
 
-
-func ValidateRequest(r *http.Request, inputs map[string][]interface{}) (bool, map[string]string) {
+// ValidateRequest validates HTTP request inputs based on provided rules and returns errors if any.
+func ValidateRequest(r *http.Request, inputs map[string][]interface{}, app *app.Application) (bool, map[string]string) {
 	r.ParseForm()
 
-	v := NewValidator()
+	v := NewValidator(app)
 	errors := make(map[string]string)
 
 	hold := make(map[string]interface{})
@@ -118,6 +100,10 @@ func ValidateRequest(r *http.Request, inputs map[string][]interface{}) (bool, ma
 		if err := v.ValidateInput(value, rules, key, hold); err != nil {
 			errors[key] = err.Error()
 		}
+	}
+
+	for index, errorMessage := range errors {
+		errors[index] = helpers.BeautifyMessage(errorMessage)
 	}
 
 	return len(errors) == 0, errors

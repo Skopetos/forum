@@ -46,7 +46,7 @@ func main() {
 		RateLimiter: rl,
 	}
 
-	server := http.Server{
+	server := &http.Server{
 		Addr:    *addr,
 		Handler: routes.Web(app),
 	}
@@ -62,7 +62,7 @@ func main() {
 		}
 	}()
 
-	waitForShutdown(&server, logger)
+	waitForShutdown(server, logger)
 
 }
 func initDatabase(dbName string, logger *slog.Logger) (*database.Connection, error) {

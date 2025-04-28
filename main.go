@@ -36,7 +36,7 @@ func main() {
 
 	defer db.DB.Close()
 
-	session := session.NewSessionStore(1*time.Minute, 1*time.Minute)
+	session := session.NewSessionStore(1*time.Hour, 1*time.Hour)
 	rl := ratelimiter.NewRateLimiter(100, 1*time.Minute)
 
 	app := &app.Application{

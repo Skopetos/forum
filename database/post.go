@@ -21,7 +21,7 @@ func (db *Connection) SetPost(title, content, author, categories string) error {
 	query := `INSERT INTO post(title, categories, content, author, time)
                 VALUES(?, ?, ?, ?, ?)`
 
-	_, err = db.DB.Exec(query, cleanTitle, categories, cleanContent, author, time.Now().Format("2006-01-02 15:04:05"))
+	_, err = db.DB.Exec(query, cleanTitle, categories, cleanContent, author, time.Now().Add(time.Hour*3).UTC().Format("2006-01-02 15:04:05"))
 	return err
 }
 

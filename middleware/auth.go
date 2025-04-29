@@ -27,7 +27,7 @@ func AuthMiddleware(next http.HandlerFunc, app *app.Application) http.HandlerFun
 		// Retrieve the session
 		session, err := app.DB.GetSession("token", cookie.Value)
 		if err != nil || session == nil {
-			fmt.Println(err)
+			fmt.Println("Session not found")
 			http.Redirect(w, r, "/login", http.StatusSeeOther)
 			return
 		}
@@ -39,6 +39,7 @@ func AuthMiddleware(next http.HandlerFunc, app *app.Application) http.HandlerFun
 		now := time.Now().Add(time.Hour * 3).UTC() // Local time
 
 		if expiresAt.Before(now) {
+			fmt.Println("debug!")
 			app.DB.DeleteSession(session.ID)
 			fmt.Println("Session expired")
 			expireCookie := http.Cookie{

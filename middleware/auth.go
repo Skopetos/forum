@@ -39,9 +39,9 @@ func AuthMiddleware(next http.HandlerFunc, app *app.Application) http.HandlerFun
 		now := time.Now().Add(time.Hour * 3).UTC() // Local time
 
 		if expiresAt.Before(now) {
-			fmt.Println("debug!")
+
 			app.DB.DeleteSession(session.ID)
-			fmt.Println("Session expired")
+			fmt.Println("Session expired test")
 			expireCookie := http.Cookie{
 				Name:   "auth-token",
 				Value:  "",

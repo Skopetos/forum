@@ -27,7 +27,7 @@ func AuthMiddleware(next http.HandlerFunc, app *app.Application) http.HandlerFun
 		// Retrieve the session
 		session, err := app.DB.GetSession("token", cookie.Value)
 		if err != nil || session == nil {
-			fmt.Println("Session not found")
+			fmt.Println(err)
 			http.Redirect(w, r, "/login", http.StatusSeeOther)
 			return
 		}
